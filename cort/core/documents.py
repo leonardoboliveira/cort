@@ -399,7 +399,7 @@ class CoNLLDocument(Document):
                   for span in sentence_spans]
         sd = StanfordDependencies.get_instance()
         dep_trees = sd.convert_trees(
-            [parse.replace("NOPARSE", "S") for parse in parses],
+            [parse.replace("NOPARSE", "S") for parse in parses], include_erased=True
         )
         sentences = []
         for i, span in enumerate(sentence_spans):
