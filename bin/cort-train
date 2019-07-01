@@ -13,7 +13,7 @@ from cort.coreference import experiments
 from cort.coreference import features
 from cort.coreference import instance_extractors
 from cort.util import import_helper
-
+from multiprocessing import freeze_support
 
 __author__ = 'smartschat'
 
@@ -71,77 +71,79 @@ def parse_args():
     return parser.parse_args()
 
 
-if sys.version_info[0] == 2:
-    logging.warning("You are running cort under Python 2. cort is much more "
-                    "efficient under Python 3.3+.")
+if __name__ == "__main__":
+    freeze_support()
+    if sys.version_info[0] == 2:
+        logging.warning("You are running cort under Python 2. cort is much more "
+                        "efficient under Python 3.3+.")
 
-args = parse_args()
+    args = parse_args()
 
-if args.features:
-    mention_features, pairwise_features = import_helper.get_features(
-        args.features)
-else:
-    mention_features = [
-        features.fine_type,
-        features.gender,
-        features.number,
-        features.sem_class,
-        features.deprel,
-        features.head_ner,
-        features.length,
-        features.head,
-        features.first,
-        features.last,
-        features.preceding_token,
-        features.next_token,
-        features.governor,
-        features.ancestry
-    ]
+    if args.features:
+        mention_features, pairwise_features = import_helper.get_features(
+            args.features)
+    else:
+        mention_features = [
+            features.fine_type,
+            features.gender,
+            features.number,
+            features.sem_class,
+            features.deprel,
+            features.head_ner,
+            features.length,
+            features.head,
+            features.first,
+            features.last,
+            features.preceding_token,
+            features.next_token,
+            features.governor,
+            features.ancestry
+        ]
 
-    pairwise_features = [
-        features.exact_match,
-        features.head_match,
-        features.same_speaker,
-        features.alias,
-        features.sentence_distance,
-        features.embedding,
-        features.modifier,
-        features.tokens_contained,
-        features.head_contained,
-        features.token_distance
-    ]
+        pairwise_features = [
+            features.exact_match,
+            features.head_match,
+            features.same_speaker,
+            features.alias,
+            features.sentence_distance,
+            features.embedding,
+            features.modifier,
+            features.tokens_contained,
+            features.head_contained,
+            features.token_distance
+        ]
 
 
-perceptron = import_helper.import_from_path(args.perceptron)(
-    cost_scaling=int(args.cost_scaling),
-    n_iter=int(args.n_iter),
-    seed=int(args.seed)
-)
+    perceptron = import_helper.import_from_path(args.perceptron)(
+        cost_scaling=int(args.cost_scaling),
+        n_iter=int(args.n_iter),
+        seed=int(args.seed)
+    )
 
-extractor = instance_extractors.InstanceExtractor(
-    import_helper.import_from_path(args.extractor),
-    mention_features,
-    pairwise_features,
-    import_helper.import_from_path(args.cost_function),
-    perceptron.get_labels()
-)
+    extractor = instance_extractors.InstanceExtractor(
+        import_helper.import_from_path(args.extractor),
+        mention_features,
+        pairwise_features,
+        import_helper.import_from_path(args.cost_function),
+        perceptron.get_labels()
+    )
 
-logging.info("Reading in data.")
-training_corpus = corpora.Corpus.from_file("training",
-                                           codecs.open(args.input_filename,
-                                                       "r", "utf-8"))
+    logging.info("Reading in data.")
+    training_corpus = corpora.Corpus.from_file("training",
+                                               codecs.open(args.input_filename,
+                                                           "r", "utf-8"))
 
-logging.info("Extracting system mentions.")
-for doc in training_corpus:
-    doc.system_mentions = mention_extractor.extract_system_mentions(doc)
+    logging.info("Extracting system mentions.")
+    for doc in training_corpus:
+        doc.system_mentions = mention_extractor.extract_system_mentions(doc)
 
-model = experiments.learn(
-    training_corpus,
-    extractor,
-    perceptron
-)
+    model = experiments.learn(
+        training_corpus,
+        extractor,
+        perceptron
+    )
 
-logging.info("Writing model to file.")
-pickle.dump(model, open(args.output_filename, "wb"), protocol=2)
+    logging.info("Writing model to file.")
+    pickle.dump(model, open(args.output_filename, "wb"), protocol=2)
 
-logging.info("Done.")
+    logging.info("Done.")

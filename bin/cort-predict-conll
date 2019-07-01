@@ -19,6 +19,7 @@ from cort.coreference import experiments
 from cort.coreference import features
 from cort.coreference import instance_extractors
 from cort.util import import_helper
+from multiprocessing import freeze_support
 
 
 __author__ = 'smartschat'
@@ -119,94 +120,95 @@ def get_scores(output_data, gold_data):
 
     return results_formatted
 
+if __name__ == "__main__":
+    freeze_support()
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s %(levelname)s %(''message)s')
 
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s %(levelname)s %(''message)s')
+    if sys.version_info[0] == 2:
+        logging.warning("You are running cort under Python 2. cort is much more "
+                        "efficient under Python 3.3+.")
+    args = parse_args()
 
-if sys.version_info[0] == 2:
-    logging.warning("You are running cort under Python 2. cort is much more "
-                    "efficient under Python 3.3+.")
-args = parse_args()
+    if args.features:
+        mention_features, pairwise_features = import_helper.get_features(
+            args.features)
+    else:
+        mention_features = [
+            features.fine_type,
+            features.gender,
+            features.number,
+            features.sem_class,
+            features.deprel,
+            features.head_ner,
+            features.length,
+            features.head,
+            features.first,
+            features.last,
+            features.preceding_token,
+            features.next_token,
+            features.governor,
+            features.ancestry
+        ]
 
-if args.features:
-    mention_features, pairwise_features = import_helper.get_features(
-        args.features)
-else:
-    mention_features = [
-        features.fine_type,
-        features.gender,
-        features.number,
-        features.sem_class,
-        features.deprel,
-        features.head_ner,
-        features.length,
-        features.head,
-        features.first,
-        features.last,
-        features.preceding_token,
-        features.next_token,
-        features.governor,
-        features.ancestry
-    ]
+        pairwise_features = [
+            features.exact_match,
+            features.head_match,
+            features.same_speaker,
+            features.alias,
+            features.sentence_distance,
+            features.embedding,
+            features.modifier,
+            features.tokens_contained,
+            features.head_contained,
+            features.token_distance
+        ]
 
-    pairwise_features = [
-        features.exact_match,
-        features.head_match,
-        features.same_speaker,
-        features.alias,
-        features.sentence_distance,
-        features.embedding,
-        features.modifier,
-        features.tokens_contained,
-        features.head_contained,
-        features.token_distance
-    ]
+    logging.info("Loading model.")
+    priors, weights = pickle.load(open(args.model, "rb"))
 
-logging.info("Loading model.")
-priors, weights = pickle.load(open(args.model, "rb"))
+    perceptron = import_helper.import_from_path(args.perceptron)(
+        priors=priors,
+        weights=weights,
+        cost_scaling=0
+    )
 
-perceptron = import_helper.import_from_path(args.perceptron)(
-    priors=priors,
-    weights=weights,
-    cost_scaling=0
-)
+    extractor = instance_extractors.InstanceExtractor(
+        import_helper.import_from_path(args.extractor),
+        mention_features,
+        pairwise_features,
+        cost_functions.null_cost,
+        perceptron.get_labels()
+    )
 
-extractor = instance_extractors.InstanceExtractor(
-    import_helper.import_from_path(args.extractor),
-    mention_features,
-    pairwise_features,
-    cost_functions.null_cost,
-    perceptron.get_labels()
-)
+    logging.info("Reading in data.")
+    testing_corpus = corpora.Corpus.from_file(
+        "testing",
+        codecs.open(args.input_filename, "r", "utf-8"))
 
-logging.info("Reading in data.")
-testing_corpus = corpora.Corpus.from_file(
-    "testing",
-    codecs.open(args.input_filename, "r", "utf-8"))
+    logging.info("Extracting system mentions.")
+    for doc in testing_corpus:
+        doc.system_mentions = mention_extractor.extract_system_mentions(doc)
 
-logging.info("Extracting system mentions.")
-for doc in testing_corpus:
-    doc.system_mentions = mention_extractor.extract_system_mentions(doc)
+    mention_entity_mapping, antecedent_mapping = experiments.predict(
+        testing_corpus,
+        extractor,
+        perceptron,
+        import_helper.import_from_path(args.clusterer)
+    )
 
-mention_entity_mapping, antecedent_mapping = experiments.predict(
-    testing_corpus,
-    extractor,
-    perceptron,
-    import_helper.import_from_path(args.clusterer)
-)
-
-testing_corpus.read_coref_decisions(mention_entity_mapping, antecedent_mapping)
+    testing_corpus.read_coref_decisions(mention_entity_mapping, antecedent_mapping)
 
 
-logging.info("Write corpus to file.")
-testing_corpus.write_to_file(codecs.open(args.output_filename, "w", "utf-8"))
+    logging.info("Write corpus to file.")
+    testing_corpus.write_to_file(codecs.open(args.output_filename, "w", "utf-8"))
 
-if args.ante:
-    logging.info("Write antecedent decisions to file")
-    testing_corpus.write_antecedent_decisions_to_file(open(args.ante, "w"))
+    if args.ante:
+        logging.info("Write antecedent decisions to file")
+        testing_corpus.write_antecedent_decisions_to_file(open(args.ante, "w"))
 
-if args.gold:
-    logging.info("Evaluate.")
-    print(get_scores(args.output_filename, args.gold))
+    if args.gold:
+        logging.info("Evaluate.")
+        print(get_scores(args.output_filename, args.gold))
 
-logging.info("Done.")
+    logging.info("Done.")
