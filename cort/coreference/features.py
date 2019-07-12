@@ -10,12 +10,47 @@ from __future__ import division
 
 
 import re
-
-
 from cort.core import spans
-
+import numpy as np
 
 __author__ = 'smartschat'
+
+_bert_db = None
+
+
+def __load_bert_db():
+    global _bert_db
+    print("Loading bert embeddings")
+
+    import pandas as pd
+    df = pd.read_csv(r"F:\Users\loliveira\PycharmProjects\proposta\code\extra_files\bc.encoded",header=None)
+    df = df.drop(1, axis= 1).set_index([0,2,3])
+
+    _bert_db = df
+
+
+def bert_pair_embedding(anaphor, antecedent):
+    _, v1 = bert_embedding(anaphor)
+    _, v2 = bert_embedding(antecedent)
+
+    return "bert_pair_embedding", np.concat(v2, v2)
+
+
+def bert_embedding(mention):
+    if _bert_db is None:
+        __load_bert_db()
+
+    if "bert_embeding" in mention.attributes:
+        attr = mention.attributes["bert_embeding"]
+    else:
+        doc_id = mention.document.identifier
+        sentence_id = mention.attributes["sentence_id"]
+        b = mention.span.begin
+        e = mention.span.end
+        attr = _bert_db.loc[(doc_id, sentence_id), :][b:e].mean()
+        mention.attributes["bert_embeding"] = attr
+
+    return "bert_embedding", attr
 
 
 def fine_type(mention):

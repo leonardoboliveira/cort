@@ -6,6 +6,7 @@ import sys
 
 import mmh3
 import numpy
+from tqdm import tqdm
 
 
 __author__ = 'martscsn'
@@ -113,7 +114,8 @@ class InstanceExtractor:
                                zip([self] * len(corpus.documents),
                                    corpus.documents))
         else:
-            results = pool.map(self._extract_doc, corpus.documents)
+            #results = pool.map(self._extract_doc, corpus.documents)
+            results = [self._extract_doc(d) for d in tqdm(corpus.documents, desc="Documents")]
 
         pool.close()
         pool.join()
@@ -141,6 +143,17 @@ class InstanceExtractor:
                 end = substructures_mapping[i + 1]
 
                 for pair_index in range(begin, end):
+                    if len(anaphors) <= pair_index or len(antecedents) <= pair_index:
+                        print("Outside pair_index")
+
+                    if len(doc.system_mentions) <= anaphors[pair_index]:
+                        print("Not found anaphor")
+                        continue
+
+                    if len(doc.system_mentions) <= antecedents[pair_index]:
+                        print("Not found antecedents")
+                        continue
+
                     arc = (doc.system_mentions[anaphors[pair_index]],
                            doc.system_mentions[antecedents[pair_index]])
 
@@ -215,7 +228,7 @@ class InstanceExtractor:
             if not struct:
                 continue
 
-            for arc in struct:
+            for arc in tqdm(struct, desc="Arc"):
                 # ids for anaphor and antecedent
                 anaphors.append(mentions_to_ids[arc[0]])
                 antecedents.append(mentions_to_ids[arc[1]])
