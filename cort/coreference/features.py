@@ -23,32 +23,76 @@ def __load_bert_db():
     print("Loading bert embeddings")
 
     import pandas as pd
-    df = pd.read_csv(r"F:\Users\loliveira\PycharmProjects\proposta\code\extra_files\bc.encoded",header=None)
-    df = df.drop(1, axis= 1).set_index([0,2,3])
+    # TODO: Colocar isso dinamico
+    df = pd.read_csv(r"F:\Users\loliveira\PycharmProjects\proposta\code\extra_files\bc.encoded", header=None)
+    # df = pd.read_csv(r"F:\Users\loliveira\PycharmProjects\proposta\code\extra_files\cnn_0341.encoded", header=None)
+    df[3] = df.groupby(0).cumcount()
+    df = df.drop(1, axis=1).drop(2, axis=1).set_index([0, 3])
 
-    _bert_db = df
+    df = (df - df.min().min())
+    _bert_db = df.cumsum()
+
+
+def get_embedding(doc_id, begin, end):
+    if _bert_db is None:
+        __load_bert_db()
+
+    if begin >= end:
+        return np.zeros(len(_bert_db.columns))
+
+    last_line = _bert_db.loc[doc_id, end - 1]
+    if begin == 0:
+        return last_line / end
+
+    first_line = _bert_db.loc[doc_id, begin - 1]
+    return (last_line - first_line)/(end - begin)
+
+
+def num_sentence_distance(anaphor, antecedent):
+    _, d = sentence_distance(anaphor, antecedent)
+    if d == ">=5":
+        i = 5
+    else:
+        i = int(d)
+    return "num_sentence_distance", i
+
+
+def bert_between_mentions(anaphor, antecedent):
+    if anaphor.is_dummy():
+        b = 0
+        e = antecedent.span.begin
+    elif antecedent.is_dummy():
+        b = 0
+        e = anaphor.span.begin
+    else:
+        b = min(anaphor.span.end, antecedent.span.end)
+        e = max(anaphor.span.begin, antecedent.span.begin)
+
+    doc_id = anaphor.document.identifier
+    attr = get_embedding(doc_id, b, e)  # _bert_db.loc[doc_id, :][b:e].mean()
+
+    return "bert_between_mentions", attr
 
 
 def bert_pair_embedding(anaphor, antecedent):
     _, v1 = bert_embedding(anaphor)
     _, v2 = bert_embedding(antecedent)
 
-    return "bert_pair_embedding", np.concat(v2, v2)
+    return "bert_pair_embedding", np.concatenate((v2, v1))
 
 
 def bert_embedding(mention):
-    if _bert_db is None:
-        __load_bert_db()
-
-    if "bert_embeding" in mention.attributes:
-        attr = mention.attributes["bert_embeding"]
+    if "bert_embedding" in mention.attributes:
+        attr = mention.attributes["bert_embedding"]
     else:
-        doc_id = mention.document.identifier
-        sentence_id = mention.attributes["sentence_id"]
-        b = mention.span.begin
-        e = mention.span.end
-        attr = _bert_db.loc[(doc_id, sentence_id), :][b:e].mean()
-        mention.attributes["bert_embeding"] = attr
+        if mention.is_dummy():
+            attr = np.zeros(len(_bert_db.columns))
+        else:
+            doc_id = mention.document.identifier
+            b = mention.span.begin
+            e = mention.span.end + 1
+            attr = get_embedding(doc_id, b, e)  # _bert_db.loc[doc_id, :][b:e].mean()
+        mention.attributes["bert_embedding"] = attr
 
     return "bert_embedding", attr
 

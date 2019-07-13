@@ -75,6 +75,10 @@ class InstanceExtractor:
         else:
             self.convert_to_string_function = str
 
+        # TODO: Melhorar forma de definir isso
+        self._extract_features_effective = self._extract_features_bert
+        # self._extract_features_effective = self._extract_features_original
+
     def extract(self, corpus):
         """ Extract instances and features from a corpus.
 
@@ -114,7 +118,7 @@ class InstanceExtractor:
                                zip([self] * len(corpus.documents),
                                    corpus.documents))
         else:
-            #results = pool.map(self._extract_doc, corpus.documents)
+            # results = pool.map(self._extract_doc, [d for d in tqdm(corpus.documents, desc="Documents")])
             results = [self._extract_doc(d) for d in tqdm(corpus.documents, desc="Documents")]
 
         pool.close()
@@ -274,6 +278,20 @@ class InstanceExtractor:
                 substructures_mapping)
 
     def _extract_features(self, arc, cache):
+        return self._extract_features_effective(arc, cache)
+
+    def _extract_features_bert(self, arc, cache):
+        anaphor, antecedent = arc
+        pairwise_features = [feature(anaphor, antecedent) for feature in self.pairwise_features]
+
+        all_nonnumeric_feats = array.array('I', [])
+        vals = numpy.concatenate([x[1] for x in pairwise_features])
+        all_numeric_feats = array.array('I', list(range(len(vals))))
+        numeric_vals = array.array("f", vals)
+
+        return all_nonnumeric_feats, all_numeric_feats, numeric_vals
+
+    def _extract_features_original(self, arc, cache):
         anaphor, antecedent = arc
         inst_feats = []
         numeric_features = []

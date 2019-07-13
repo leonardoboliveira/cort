@@ -533,12 +533,15 @@ cdef class Perceptron:
             weights[nonnumeric_features[index]] += update_val_for_weights
             cached_weights[nonnumeric_features[index]] += \
                 update_val_for_cached_weights
+            # print weights[nonnumeric_features[index]],
 
         for index in range(numeric_features.shape[0]):
             weights[numeric_features[index]] += \
                 update_val_for_weights*numeric_vals[index]
             cached_weights[numeric_features[index]] += \
                 update_val_for_cached_weights*numeric_vals[index]
+
+        # print ''
 
     @cython.boundscheck(False)
     @cython.wraparound(False)

@@ -38,6 +38,78 @@ from cort.coreference import perceptrons
 __author__ = 'martscsn'
 
 
+def get_candidate_pairs(mentions, max_distance=50, max_distance_with_match=500, debug=False):
+    '''
+    Yield tuples of mentions, dictionnary of candidate antecedents for the mention
+    Arg:
+        mentions: an iterator over mention indexes (as returned by get_candidate_mentions)
+        max_mention_distance : max distance between a mention and its antecedent
+        max_mention_distance_string_match : max distance between a mention and
+            its antecedent when there is a proper noun match
+    '''
+    if debug: print("get_candidate_pairs: mentions", mentions)
+
+    if max_distance_with_match is not None:
+        word_to_mentions = {}
+        for i in range(len(mentions)):
+            if mentions[i].is_dummy():
+                continue
+            for tok in mentions[i].attributes["tokens"]:
+                if not tok in word_to_mentions:
+                    word_to_mentions[tok] = [i]
+                else:
+                    word_to_mentions[tok].append(i)
+
+    for i in range(1, len(mentions)):
+        antecedents = set([mentions[k] for k in range(i)]) if max_distance is None \
+                 else set([mentions[k] for k in range(max(0, i - max_distance), i)])
+
+        antecedents.add(mentions[0])
+
+        if debug: print("antecedents", antecedents)
+        if max_distance_with_match is not None:
+            for tok in mentions[i].attributes["tokens"]:
+                with_string_match = word_to_mentions.get(tok, None)
+                for match_idx in with_string_match:
+                    if match_idx < i and match_idx >= i - max_distance_with_match:
+                        antecedents.add(mentions[match_idx])
+
+        yield i, antecedents
+
+
+def extract_substructures_limited(doc):
+    """ Extract the search space for the antecedent tree model,
+
+    The mention ranking model consists in computing the optimal antecedent for
+    each anaphor. These decisions are represented as edges in a tree of
+    anaphor-antecedent decisions. This functions extracts the search space for
+    the tree.
+
+    The search space is represented as a nested list of mention pairs. The
+    mention pairs are candidate arcs in the graph. The nested list contains
+    only one list, since antecedent trees have only one substructure for
+    each document.
+
+    The list contains all potential (anaphor, antecedent) pairs in the
+    following order: (m_1, m_0), (m_2, m_1), (m_2, m_0), (m_3, m_2), ...,
+    where m_j is the jth mention in the document.
+
+    Args:
+        doc (CoNLLDocument): The document to extract substructures from.
+
+    Returns:
+        (list(list(Mention, Mention))): The nested list of mention pairs
+        describing the search space for the substructures.
+    """
+    substructure = []
+    for i, antecedents in get_candidate_pairs(doc.system_mentions, 10):
+        ana = doc.system_mentions[i]
+        for ante in antecedents:
+            substructure.append((ana, ante))
+
+    return [substructure]
+
+
 def extract_substructures(doc):
     """ Extract the search space for the antecedent tree model,
 
@@ -75,8 +147,73 @@ def extract_substructures(doc):
 
 
 class AntecedentTreePerceptron(perceptrons.Perceptron):
-    """ A perceptron for antecedent trees. """
+    def find_best_arcs(self, arcs, arc_information, label="+"):
+        """ Find the highest-scoring arc and arc consistent with the gold
+        information among a set of arcs.
+
+        Args:
+            arcs (list((Mention, Mention)): A list of mention pairs constituting
+                arcs.
+            arc_information (dict((Mention, Mention),
+                                  ((array, array, array), list(int), bool)):
+                A mapping of arcs (= mention pairs) to information about these
+                arcs. The information consists of the features, the costs for
+                the arc (for each label), and whether predicting the arc to be
+                coreferent is consistent with the gold annotation). The features
+                are divided in three arrays: the first array contains the non-
+                numeric features, the second array the numeric features, and the
+                third array the values for the numeric features. The features
+                are represented as integers via feature hashing.
+            label (str): The label of the arcs. Defaults to "+".
+
+        Returns:
+            A 5-tuple describing the highest-scoring anaphor-antecedent
+            decision, and the highest-scoring anaphor-antecedent decision
+            consistent with the gold annotation. The tuple consists of:
+
+                - **best** (*(Mention, Mention)*): the highest-scoring
+                  anaphor-antecedent decision.
+                - **max_val** (*float*): the score of the highest-scoring
+                  anaphor-antecedent decision,
+                - **best_cons** (*(Mention, Mention)*): the highest-scoring
+                  anaphor-antecedent decision consistent with the gold
+                  annotation.
+                - **max_const** (*float*): the score of the highest-scoring
+                  anaphor-antecedent decision consistent with the gold
+                  annotation.
+                - **is_consistent** (*bool*): whether the highest-scoring
+                  anaphor-antecedent decision is consistent with the gold
+                  information.
+        """
+        max_val = float("-inf")
+        best = None
+
+        max_cons = float("-inf")
+        best_cons = None
+
+        best_is_consistent = False
+
+        for arc in arcs:
+            features, costs, consistent = arc_information[arc]
+            score = self.score_arc(arc, arc_information)
+
+            if score > max_val:
+                best = arc
+                max_val = score
+                best_is_consistent = consistent
+
+            if score > max_cons and consistent:
+                best_cons = arc
+                max_cons = score
+
+        # print(f"max_val:{max_val}, max_cons:{max_cons}")
+        return best, max_val, best_cons, max_cons, best_is_consistent
+
     def argmax(self, substructure, arc_information):
+        return self.argmax_general(substructure, arc_information)
+
+    """ A perceptron for antecedent trees. """
+    def argmax_strict(self, substructure, arc_information):
         """ Decoder for antecedent trees.
 
         Compute highest-scoring antecedent tree and highest-scoring antecedent
@@ -142,12 +279,119 @@ class AntecedentTreePerceptron(perceptrons.Perceptron):
                 self.find_best_arcs(substructure[first_arc:last_arc],
                                     arc_information)
 
-            arcs.append(best)
-            arcs_scores.append(max_val)
-            coref_arcs.append(best_cons)
-            coref_arcs_scores.append(max_cons)
+            if best is not None:
+                arcs.append(best)
+                arcs_scores.append(max_val)
+            else:
+                print("No best")
+
+            if best_cons is not None:
+                coref_arcs.append(best_cons)
+                coref_arcs_scores.append(max_cons)
+            else:
+                pass #print("No best")
 
             is_consistent &= best_is_consistent
+
+        #print("Done argmax")
+
+        return (
+            arcs,
+            [],
+            arcs_scores,
+            coref_arcs,
+            [],
+            coref_arcs_scores,
+            is_consistent
+        )
+
+    """ A perceptron for antecedent trees. """
+    def argmax_general(self, substructure, arc_information):
+        """ Decoder for antecedent trees.
+
+        Compute highest-scoring antecedent tree and highest-scoring antecedent
+        tree consistent with the gold annotation.
+
+        Args:
+            substructure (list((Mention, Mention))): The list of mention pairs
+                which define the search space for one substructure. For mention
+                ranking, this list contains all potential anaphor-antecedent
+                pairs in the following order:
+                (m_1, m_0), (m_2, m_1), (m_2, m_0), (m_3, m_2), ...
+            arc_information (dict((Mention, Mention),
+                                  ((array, array, array), list(int), bool)):
+                A mapping of arcs (= mention pairs) to information about these
+                arcs. The information consists of the features, the costs for
+                the arc (for each label), and whether predicting the arc to be
+                coreferent is consistent with the gold annotation). The features
+                are divided in three arrays: the first array contains the non-
+                numeric features, the second array the numeric features, and the
+                third array the values for the numeric features. The features
+                are represented as integers via feature hashing.
+
+        Returns:
+            A 7-tuple describing the highest-scoring antecedent tree, and the
+            highest-scoring antecedent tree consistent with the gold
+            annotation. The tuple consists of:
+
+                - **best_arcs** (*list((Mention, Mention))*): the arcs
+                  constituting the highest-scoring antecedent tree,
+                - **best_labels** (*list(str)*): empty, the antecedent tree
+                  approach does not employ any labels,
+                - **best_scores** (*list(float)*): the scores of the
+                  arcs in the highest-scoring antecedent tree,
+                - **best_cons_arcs** (*list((Mention, Mention))*): the arcs
+                  constituting the highest-scoring antecedent tree consistent
+                  with the gold annotation.
+                - **best_cons_labels** (*list(str)*): empty, the antecedent
+                  tree approach does not employ any labels
+                - **best_cons_scores** (*list(float)*): the scores of the
+                  arcs in the highest-scoring antecedent tree consistent with
+                  the gold annotation,
+                - **is_consistent** (*bool*): whether the highest-scoring
+                  antecedent tree is consistent with the gold annotation.
+        """
+        if not substructure:
+            return [], [], [], [], [], [], True
+
+        number_mentions = len(substructure[0][0].document.system_mentions)
+
+        arcs = []
+        arcs_scores = []
+        coref_arcs = []
+        coref_arcs_scores = []
+
+        is_consistent = True
+
+        first_arc = 0
+        ana = substructure[0][0]
+        for i in range(len(substructure)):
+            last_arc = i
+            if substructure[i][0] != ana or i == len(substructure) - 1:
+                if i == len(substructure) - 1:
+                    last_arc += 1
+
+                best, max_val, best_cons, max_cons, best_is_consistent = \
+                    self.find_best_arcs(substructure[first_arc:last_arc],
+                                        arc_information)
+
+                if best is not None:
+                    arcs.append(best)
+                    arcs_scores.append(max_val)
+                else:
+                    print("No best")
+
+                if best_cons is not None:
+                    coref_arcs.append(best_cons)
+                    coref_arcs_scores.append(max_cons)
+                else:
+                    pass  # print("No best")
+
+                is_consistent &= best_is_consistent
+                first_arc = i
+                ana = substructure[first_arc][0]
+
+        #print("Done argmax")
 
         return (
             arcs,
