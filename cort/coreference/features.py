@@ -29,7 +29,7 @@ def __load_bert_db():
     df[3] = df.groupby(0).cumcount()
     df = df.drop(1, axis=1).drop(2, axis=1).set_index([0, 3])
 
-    df = (df - df.min().min())
+    df = (df - df.min().min()) / len(df.columns)
     _bert_db = df.cumsum()
 
 
@@ -45,7 +45,7 @@ def get_embedding(doc_id, begin, end):
         return last_line / end
 
     first_line = _bert_db.loc[doc_id, begin - 1]
-    return (last_line - first_line)/(end - begin)
+    return (last_line - first_line) / (end - begin)
 
 
 def num_sentence_distance(anaphor, antecedent):
@@ -86,7 +86,7 @@ def bert_embedding(mention):
         attr = mention.attributes["bert_embedding"]
     else:
         if mention.is_dummy():
-            attr = np.zeros(len(_bert_db.columns))
+            attr = np.ones(len(_bert_db.columns))
         else:
             doc_id = mention.document.identifier
             b = mention.span.begin

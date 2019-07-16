@@ -494,6 +494,21 @@ cdef class Perceptron:
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
+    cdef double _cython_my_score_arc(self,unsigned short[:] costs,
+                                          numpy.uint32_t[:] nonnumeric_features,
+                                          numpy.uint32_t[:] numeric_features,
+                                          float[:] numeric_vals):
+        return self.my_score_arc(
+            self.priors["+"],
+            self.weights["+"],
+            self.cost_scaling,
+            costs[0],
+            nonnumeric_features,
+            numeric_features,
+            numeric_vals)
+
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     cdef double _cython_score_arc(self,
                                   double prior,
                                   double[:] weights,
@@ -552,3 +567,34 @@ cdef class Perceptron:
 
         for index in range(weights.shape[0]):
             weights[index] -= cached_weights[index]/counter
+
+    def my_score_arc(self,
+                      prior,
+                      weights,
+                      cost_scaling,
+                      costs,
+                      nonnumeric_features,
+                      numeric_features,
+                      numeric_vals):
+
+        score = 0.0
+
+        score += prior
+        score += cost_scaling * costs
+
+        for index in range(nonnumeric_features.shape[0]):
+            score += weights[nonnumeric_features[index]]
+
+        for index in range(numeric_features.shape[0]):
+            score += weights[numeric_features[index]]*numeric_vals[index]
+
+        return score
+
+    def _my_score_arc_c(self,costs,
+            nonnumeric_features,
+            numeric_features,
+            numeric_vals):
+        return self._cython_my_score_arc(costs,
+                                         nonnumeric_features,
+                                         numeric_features,
+                                         numeric_vals)

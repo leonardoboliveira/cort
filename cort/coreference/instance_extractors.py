@@ -282,12 +282,78 @@ class InstanceExtractor:
 
     def _extract_features_bert(self, arc, cache):
         anaphor, antecedent = arc
-        pairwise_features = [feature(anaphor, antecedent) for feature in self.pairwise_features]
 
-        all_nonnumeric_feats = array.array('I', [])
-        vals = numpy.concatenate([x[1] for x in pairwise_features])
+        vals = []
+
+        # Non numeric (original)
+        inst_feats = []
+        numeric_types = {"float", "int"}
+        if not antecedent.is_dummy():
+            pairwise_features = [feature(anaphor, antecedent) for feature in self.pairwise_features]
+            # Real Numeric
+            bert_features = []
+            original_features = []
+            for k, v in pairwise_features:
+                if "bert" in k:
+                    bert_features.append((k, v))
+                else:
+                    original_features.append((k, v))
+
+            vals = numpy.concatenate([x[1] for x in bert_features])
+
+            # mention features
+            for mention in [anaphor, antecedent]:
+                if mention not in cache:
+                    cache[mention] = [feature(mention) for feature
+                                      in self.mention_features]
+
+            ana_features = cache[anaphor]
+            ante_features = cache[antecedent]
+
+            # first: non-numeric features (categorial, boolean)
+            inst_feats += ["ana_" + feat + "=" +
+                           self.convert_to_string_function(val) for feat, val in
+                           ana_features if type(val).__name__ not in
+                           numeric_types]
+
+            len_ana_features = len(inst_feats)
+
+            inst_feats += ["ante_" + feat + "=" +
+                           self.convert_to_string_function(val) for feat, val in
+                           ante_features if type(val).__name__ not in
+                           numeric_types]
+
+            # concatenated features
+            inst_feats += ["ana_" + ana_info[0] + "=" +
+                           self.convert_to_string_function(ana_info[1]) +
+                           "^ante_" + ante_info[0] + "=" +
+                           self.convert_to_string_function(ante_info[1])
+                           for ana_info, ante_info in
+                           zip(ana_features, ante_features)]
+
+            # pairwise features
+            inst_feats += [feature + "=" +
+                           self.convert_to_string_function(val) for feature, val
+                           in original_features
+                           if val and (type(val).__name__ not in numeric_types)]
+
+            # feature combinations
+            fine_type_indices = {len_ana_features * i for i
+                                 in [0, 1, 2]}
+
+            inst_feats += [
+                inst_feats[i] + "^" + word for i in fine_type_indices
+                for j, word in enumerate(inst_feats)
+                if j not in fine_type_indices
+            ]
+
         all_numeric_feats = array.array('I', list(range(len(vals))))
         numeric_vals = array.array("f", vals)
+
+        # to hash
+        all_nonnumeric_feats = array.array(
+            'I', [mmh3.hash(word.encode("utf-8")) & 2 ** 24 - 1 for word
+                  in inst_feats])
 
         return all_nonnumeric_feats, all_numeric_feats, numeric_vals
 

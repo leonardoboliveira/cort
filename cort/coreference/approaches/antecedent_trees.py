@@ -147,6 +147,62 @@ def extract_substructures(doc):
 
 
 class AntecedentTreePerceptron(perceptrons.Perceptron):
+
+    def my_score_arc(self,
+                      prior,
+                      weights,
+                      cost_scaling,
+                      costs,
+                      nonnumeric_features,
+                      numeric_features,
+                      numeric_vals):
+
+        score = 0.0
+
+        score += prior
+        score += cost_scaling * costs
+
+        for index in range(nonnumeric_features.shape[0]):
+            score += weights[nonnumeric_features[index]]
+
+        for index in range(numeric_features.shape[0]):
+            score += weights[numeric_features[index]]*numeric_vals[index]
+
+        return score
+
+    def score_arc(self, arc, arc_information, label="+"):
+        """ Score an arc according to priors, weights and costs.
+
+        Args:
+            arc ((Mention, Mention)): The pair of mentions constituting the arc.
+            arc_information (dict((Mention, Mention),
+                                  ((array, array, array), list(int), bool)):
+                A mapping of arcs (= mention pairs) to information about these
+                arcs. The information consists of the features, the costs for
+                the arc (for each label), and whether predicting the arc to be
+                coreferent is consistent with the gold annotation). The features
+                are divided in three arrays: the first array contains the non-
+                numeric features, the second array the numeric features, and the
+                third array the values for the numeric features. The features
+                are represented as integers via feature hashing.
+            label (str): The label of the arc. Defaults to "+".
+
+        Returns:
+            float: The sum of all weights for the features, plus the scaled
+                costs for predicting the arc, plus the prior for the label.
+        """
+
+        features, costs, consistent = arc_information[arc]
+
+        nonnumeric_features, numeric_features, numeric_vals = features
+
+        return self._my_score_arc_c(
+            costs,
+            nonnumeric_features,
+            numeric_features,
+            numeric_vals
+        )
+
     def find_best_arcs(self, arcs, arc_information, label="+"):
         """ Find the highest-scoring arc and arc consistent with the gold
         information among a set of arcs.
@@ -365,8 +421,14 @@ class AntecedentTreePerceptron(perceptrons.Perceptron):
 
         first_arc = 0
         ana = substructure[0][0]
+        consistent_counter = 0
+        total_consistent = 0
         for i in range(len(substructure)):
             last_arc = i
+
+            _, _, consistent = arc_information[substructure[i]]
+            total_consistent += consistent
+
             if substructure[i][0] != ana or i == len(substructure) - 1:
                 if i == len(substructure) - 1:
                     last_arc += 1
@@ -388,10 +450,14 @@ class AntecedentTreePerceptron(perceptrons.Perceptron):
                     pass  # print("No best")
 
                 is_consistent &= best_is_consistent
+                consistent_counter += best_is_consistent
+
                 first_arc = i
                 ana = substructure[first_arc][0]
 
-        #print("Done argmax")
+        print(f"Done argmax {consistent_counter}/{total_consistent}")
+        # for arc in arcs:
+        #    print(f"Arc:{arc}")
 
         return (
             arcs,
