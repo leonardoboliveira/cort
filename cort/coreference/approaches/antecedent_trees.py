@@ -455,7 +455,8 @@ class AntecedentTreePerceptron(perceptrons.Perceptron):
                 first_arc = i
                 ana = substructure[first_arc][0]
 
-        print(f"Done argmax {consistent_counter}/{total_consistent}")
+        doc_id = substructure[0][0].document.identifier
+        print(f"Done argmax {consistent_counter}/{total_consistent} \t{doc_id}")
         # for arc in arcs:
         #    print(f"Arc:{arc}")
 

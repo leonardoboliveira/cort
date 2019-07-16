@@ -283,7 +283,7 @@ class InstanceExtractor:
     def _extract_features_bert(self, arc, cache):
         anaphor, antecedent = arc
 
-        vals = []
+        bert_features = []
 
         # Non numeric (original)
         inst_feats = []
@@ -291,15 +291,12 @@ class InstanceExtractor:
         if not antecedent.is_dummy():
             pairwise_features = [feature(anaphor, antecedent) for feature in self.pairwise_features]
             # Real Numeric
-            bert_features = []
             original_features = []
             for k, v in pairwise_features:
                 if "bert" in k:
                     bert_features.append((k, v))
                 else:
                     original_features.append((k, v))
-
-            vals = numpy.concatenate([x[1] for x in bert_features])
 
             # mention features
             for mention in [anaphor, antecedent]:
@@ -346,7 +343,16 @@ class InstanceExtractor:
                 for j, word in enumerate(inst_feats)
                 if j not in fine_type_indices
             ]
+        else:
+            for f in []: # self.pairwise_features:
+                try:
+                    f, v = f(anaphor, antecedent)
+                    if "bert" in f:
+                        bert_features.append((f, v))
+                except (KeyError, AttributeError):
+                    pass
 
+        vals = [] if len(bert_features) == 0 else numpy.concatenate([x[1] for x in bert_features])
         all_numeric_feats = array.array('I', list(range(len(vals))))
         numeric_vals = array.array("f", vals)
 
