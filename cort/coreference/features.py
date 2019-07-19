@@ -24,8 +24,8 @@ def __load_bert_db():
 
     import pandas as pd
     # TODO: Colocar isso dinamico
-    df = pd.read_csv(r"F:\Users\loliveira\PycharmProjects\proposta\code\extra_files\bc.encoded", header=None)
-    # df = pd.read_csv(r"F:\Users\loliveira\PycharmProjects\proposta\code\extra_files\cnn_0341.encoded", header=None)
+    # df = pd.read_csv(r"F:\Users\loliveira\PycharmProjects\proposta\code\extra_files\bc.encoded", header=None)
+    df = pd.read_csv(r"F:\Users\loliveira\PycharmProjects\proposta\code\extra_files\cnn_0341.encoded", header=None)
     df[3] = df.groupby(0).cumcount()
     df = df.drop(1, axis=1).drop(2, axis=1).set_index([0, 3])
 

@@ -30,6 +30,7 @@ from __future__ import division
 
 
 import array
+import numpy as np
 
 
 from cort.coreference import perceptrons
