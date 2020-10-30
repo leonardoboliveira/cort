@@ -135,3 +135,5 @@ Fixed data structure bug in documents.py. The results from the paper are not aff
 
 __Wednesday, 22 October 2014__  
 Initial release.
+
+#Teste
