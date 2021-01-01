@@ -54,7 +54,7 @@ setup(
                                        'javasrc/util/misc/*',
                                        'javasrc/util/*.java'],
     },
-    scripts=['bin/cort-train', 'bin/cort-predict-conll',
+    scripts=['bin/cort-train', 'bin/cort-predict-conll.py',
              'bin/cort-predict-raw', 'bin/cort-visualize',
              'bin/run-multigraph']
 )

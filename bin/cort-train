@@ -6,7 +6,6 @@ import logging
 import pickle
 import sys
 
-
 from cort.core import corpora
 from cort.core import mention_extractor
 from cort.coreference import experiments
@@ -16,7 +15,6 @@ from cort.util import import_helper
 from multiprocessing import freeze_support
 
 __author__ = 'smartschat'
-
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s %(''message)s')
@@ -68,6 +66,16 @@ def parse_args():
                              'provided, defaults to a standard set of'
                              'features.')
 
+    parser.add_argument('-instance_extractor',
+                        dest='instance_extractor',
+                        default='cort.coreference.instance_extractors.InstanceExtractor',
+                        help='The InstanceExtractor instance to use')
+
+    parser.add_argument('-model',
+                        required=False,
+                        dest='model',
+                        help='The model learned via cort-train.')
+
     return parser.parse_args()
 
 
@@ -113,14 +121,23 @@ if __name__ == "__main__":
             features.token_distance
         ]
 
+    priors, weights = None, None
+    if args.model:
+        try:
+            priors, weights = pickle.load(open(args.model, "rb"))
+            logging.info(f"Loaded model {args.model}")
+        except FileNotFoundError:
+            pass
 
     perceptron = import_helper.import_from_path(args.perceptron)(
         cost_scaling=int(args.cost_scaling),
         n_iter=int(args.n_iter),
-        seed=int(args.seed)
+        seed=int(args.seed),
+        priors=priors,
+        weights=weights
     )
 
-    extractor = instance_extractors.InstanceExtractor(
+    extractor = import_helper.import_from_path(args.instance_extractor)(
         import_helper.import_from_path(args.extractor),
         mention_features,
         pairwise_features,

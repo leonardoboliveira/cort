@@ -97,6 +97,6 @@ def plot(data,
         fig.savefig(filename, bbox_extra_artists=(legend,), bbox_inches='tight')
     else:
         legend = ax.legend(bars_for_legend, systems, loc='upper right')
-        legend.draggable()
+        legend.set_draggable(True)
 
         fig.show()

@@ -10,7 +10,6 @@ import pickle
 import subprocess
 import sys
 
-
 import cort
 from cort.core import corpora
 from cort.core import mention_extractor
@@ -20,7 +19,6 @@ from cort.coreference import features
 from cort.coreference import instance_extractors
 from cort.util import import_helper
 from multiprocessing import freeze_support
-
 
 __author__ = 'smartschat'
 
@@ -70,6 +68,10 @@ def parse_args():
                         help='The file containing the list of features. If not'
                              'provided, defaults to a standard set of'
                              'features.')
+    parser.add_argument('-instance_extractor',
+                        dest='instance_extractor',
+                        default='cort.coreference.instance_extractors.InstanceExtractor',
+                        help='The InstanceExtractor instance to use')
 
     return parser.parse_args()
 
@@ -94,14 +96,14 @@ def get_scores(output_data, gold_data):
     for line in scorer_output.split("\n"):
         if not line:
             continue
-
+        print(f"scorer_output: {scorer_output}")
         splitted = line.split()
 
         if splitted[0] == "METRIC":
             metric = line.split()[1][:-1]
 
         if (metric != 'blanc' and line.startswith("Coreference:")) \
-           or (metric == 'blanc' and line.startswith("BLANC:")):
+                or (metric == 'blanc' and line.startswith("BLANC:")):
             metrics_results[metric] = (
                 float(splitted[5][:-1]),
                 float(splitted[10][:-1]),
@@ -112,13 +114,14 @@ def get_scores(output_data, gold_data):
 
     for metric in metrics:
         results_formatted += metric + "\t" + \
-            "\t".join([str(val) for val in metrics_results[metric]]) + "\n"
+                             "\t".join([str(val) for val in metrics_results[metric]]) + "\n"
     results_formatted += "\n"
     average = (metrics_results["muc"][2] + metrics_results["bcub"][2] +
-               metrics_results["ceafe"][2])/3
+               metrics_results["ceafe"][2]) / 3
     results_formatted += "conll\t\t\t" + format(average, '.2f') + "\n"
 
     return results_formatted
+
 
 if __name__ == "__main__":
     freeze_support()
@@ -173,7 +176,7 @@ if __name__ == "__main__":
         cost_scaling=0
     )
 
-    extractor = instance_extractors.InstanceExtractor(
+    extractor = import_helper.import_from_path(args.instance_extractor)(
         import_helper.import_from_path(args.extractor),
         mention_features,
         pairwise_features,
@@ -198,7 +201,6 @@ if __name__ == "__main__":
     )
 
     testing_corpus.read_coref_decisions(mention_entity_mapping, antecedent_mapping)
-
 
     logging.info("Write corpus to file.")
     testing_corpus.write_to_file(codecs.open(args.output_filename, "w", "utf-8"))

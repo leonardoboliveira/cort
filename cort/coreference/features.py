@@ -10,91 +10,12 @@ from __future__ import division
 
 
 import re
+
+
 from cort.core import spans
-import numpy as np
+
 
 __author__ = 'smartschat'
-
-_bert_db = None
-
-
-def __load_bert_db():
-    global _bert_db
-    print("Loading bert embeddings")
-
-    import pandas as pd
-    # TODO: Colocar isso dinamico
-    # df = pd.read_csv(r"F:\Users\loliveira\PycharmProjects\proposta\code\extra_files\bc.encoded", header=None)
-    df = pd.read_csv(r"F:\Users\loliveira\PycharmProjects\proposta\code\extra_files\cnn_0341.encoded", header=None)
-    df[3] = df.groupby(0).cumcount()
-    df = df.drop(1, axis=1).drop(2, axis=1).set_index([0, 3])
-
-    df = (df - df.min().min()) / len(df.columns)
-    _bert_db = df.cumsum()
-
-
-def get_embedding(doc_id, begin, end):
-    if _bert_db is None:
-        __load_bert_db()
-
-    if begin >= end:
-        return np.zeros(len(_bert_db.columns))
-
-    last_line = _bert_db.loc[doc_id, end - 1]
-    if begin == 0:
-        return last_line / end
-
-    first_line = _bert_db.loc[doc_id, begin - 1]
-    return (last_line - first_line) / (end - begin)
-
-
-def num_sentence_distance(anaphor, antecedent):
-    _, d = sentence_distance(anaphor, antecedent)
-    if d == ">=5":
-        i = 5
-    else:
-        i = int(d)
-    return "num_sentence_distance", i
-
-
-def bert_between_mentions(anaphor, antecedent):
-    if anaphor.is_dummy():
-        b = 0
-        e = antecedent.span.begin
-    elif antecedent.is_dummy():
-        b = 0
-        e = anaphor.span.begin
-    else:
-        b = min(anaphor.span.end, antecedent.span.end)
-        e = max(anaphor.span.begin, antecedent.span.begin)
-
-    doc_id = anaphor.document.identifier
-    attr = get_embedding(doc_id, b, e)  # _bert_db.loc[doc_id, :][b:e].mean()
-
-    return "bert_between_mentions", attr
-
-
-def bert_pair_embedding(anaphor, antecedent):
-    _, v1 = bert_embedding(anaphor)
-    _, v2 = bert_embedding(antecedent)
-
-    return "bert_pair_embedding", np.concatenate((v2, v1))
-
-
-def bert_embedding(mention):
-    if "bert_embedding" in mention.attributes:
-        attr = mention.attributes["bert_embedding"]
-    else:
-        if mention.is_dummy():
-            attr = np.ones(len(_bert_db.columns))
-        else:
-            doc_id = mention.document.identifier
-            b = mention.span.begin
-            e = mention.span.end + 1
-            attr = get_embedding(doc_id, b, e)  # _bert_db.loc[doc_id, :][b:e].mean()
-        mention.attributes["bert_embedding"] = attr
-
-    return "bert_embedding", attr
 
 
 def fine_type(mention):
@@ -506,10 +427,10 @@ def relative_overlap(anaphor, antecedent):
     """
     ana_tokens = set([tok.lower() for tok in anaphor.attributes["tokens"]])
     ante_tokens = set([tok.lower() for tok
-                             in antecedent.attributes["tokens"]])
+                       in antecedent.attributes["tokens"]])
 
     overlap = len(ana_tokens & ante_tokens)/max(len(ana_tokens),
-                                                len(ante_tokens))
+                                                  len(ante_tokens))
 
     return "relative_overlap", overlap
 
@@ -543,9 +464,9 @@ def __get_modifier(mention):
             zip(mention.attributes["tokens"], mention.attributes["pos"])):
         if (token.lower() not in ["the", "this", "that", "those", "these",
                                   "a", "an"]
-            and pos not in ["POS", "IN"]
-            and (index < head_span_in_mention.begin
-                 or index > head_span_in_mention.end)):
+                and pos not in ["POS", "IN"]
+                and (index < head_span_in_mention.begin
+                     or index > head_span_in_mention.end)):
             modifiers.add(token.lower())
 
     return modifiers
@@ -593,29 +514,29 @@ def __get_category_for_alias(anaphor_ner, antecedent_ner):
 
 def __loc_alias(anaphor_cleaned_tokens, antecedent_cleaned_tokens):
     return __starts_with(anaphor_cleaned_tokens, antecedent_cleaned_tokens) or \
-        __is_abbreviation(anaphor_cleaned_tokens, antecedent_cleaned_tokens)
+           __is_abbreviation(anaphor_cleaned_tokens, antecedent_cleaned_tokens)
 
 
 def __org_alias(anaphor_cleaned_tokens, antecedent_cleaned_tokens):
     return __starts_with(anaphor_cleaned_tokens, antecedent_cleaned_tokens) or \
-        __is_abbreviation(anaphor_cleaned_tokens, antecedent_cleaned_tokens)
+           __is_abbreviation(anaphor_cleaned_tokens, antecedent_cleaned_tokens)
 
 
 def __person_alias(anaphor_cleaned_tokens, antecedent_cleaned_tokens):
     if len(anaphor_cleaned_tokens) == 1 or len(antecedent_cleaned_tokens) == 1:
         return anaphor_cleaned_tokens[0] == antecedent_cleaned_tokens[0] \
-            or anaphor_cleaned_tokens[-1] == antecedent_cleaned_tokens[-1]
+               or anaphor_cleaned_tokens[-1] == antecedent_cleaned_tokens[-1]
     elif (len(anaphor_cleaned_tokens) == 2 and anaphor_cleaned_tokens[
         0].lower() in ["mr", "ms", "mr.", "ms."]
-        or len(antecedent_cleaned_tokens) == 2 and antecedent_cleaned_tokens[
-            0].lower() in ["mr", "ms", "mr.", "ms."]):
+          or len(antecedent_cleaned_tokens) == 2 and antecedent_cleaned_tokens[
+              0].lower() in ["mr", "ms", "mr.", "ms."]):
         return anaphor_cleaned_tokens[-1] == antecedent_cleaned_tokens[-1]
     elif anaphor_cleaned_tokens[0] == antecedent_cleaned_tokens[0] and \
             anaphor_cleaned_tokens[-1] == antecedent_cleaned_tokens[-1]:
         return True
     elif len(anaphor_cleaned_tokens) > 1 and len(antecedent_cleaned_tokens) > 1:
         return anaphor_cleaned_tokens[-1] == antecedent_cleaned_tokens[-1] and \
-            anaphor_cleaned_tokens[-2] == antecedent_cleaned_tokens[-2]
+               anaphor_cleaned_tokens[-2] == antecedent_cleaned_tokens[-2]
 
     return False
 

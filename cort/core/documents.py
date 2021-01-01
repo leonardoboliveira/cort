@@ -27,7 +27,6 @@ class Document(object):
         identifier (str): A unique identifier for the document.
         in_sentence_ids (list(int)): In-sentence indicies of all tokens in the
             document, for example [0, 1, 2, 0, 1, 2, 3, 4, ...]
-        sentence_spans (list(Span)): Boundaries of all sentences in the document.
         tokens (list(str)): All tokens.
         pos (list(str)): All part-of-speech tags.
         ner (list(str)): All named entity tags (if a token does not have a
@@ -375,6 +374,7 @@ class CoNLLDocument(Document):
                     the CoNLL format.
             """
         identifier = " ".join(document_as_string.split("\n")[0].split(" ")[2:])
+        print(identifier)
 
         self.document_table = CoNLLDocument.__string_to_table(
             document_as_string)
@@ -399,7 +399,7 @@ class CoNLLDocument(Document):
                   for span in sentence_spans]
         sd = StanfordDependencies.get_instance()
         dep_trees = sd.convert_trees(
-            [parse.replace("NOPARSE", "S") for parse in parses], include_erased=True
+            [parse.replace("NOPARSE", "S") for parse in parses],include_erased=True
         )
         sentences = []
         for i, span in enumerate(sentence_spans):
@@ -559,7 +559,7 @@ class CoNLLDocument(Document):
         for mention in mentions_in_doc:
             set_id = mention.attributes["set_id"]
 
-            if set_id is None:
+            if set_id is None or mention.is_dummy():
                 continue
 
             span = mention.span

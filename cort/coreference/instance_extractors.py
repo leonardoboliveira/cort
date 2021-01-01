@@ -6,7 +6,6 @@ import sys
 
 import mmh3
 import numpy
-from tqdm import tqdm
 
 
 __author__ = 'martscsn'
@@ -75,10 +74,6 @@ class InstanceExtractor:
         else:
             self.convert_to_string_function = str
 
-        # TODO: Melhorar forma de definir isso
-        self._extract_features_effective = self._extract_features_bert
-        # self._extract_features_effective = self._extract_features_original
-
     def extract(self, corpus):
         """ Extract instances and features from a corpus.
 
@@ -118,8 +113,7 @@ class InstanceExtractor:
                                zip([self] * len(corpus.documents),
                                    corpus.documents))
         else:
-            # results = pool.map(self._extract_doc, [d for d in tqdm(corpus.documents, desc="Documents")])
-            results = [self._extract_doc(d) for d in tqdm(corpus.documents, desc="Documents")]
+            results = pool.map(self._extract_doc, corpus.documents)
 
         pool.close()
         pool.join()
@@ -147,17 +141,6 @@ class InstanceExtractor:
                 end = substructures_mapping[i + 1]
 
                 for pair_index in range(begin, end):
-                    if len(anaphors) <= pair_index or len(antecedents) <= pair_index:
-                        print("Outside pair_index")
-
-                    if len(doc.system_mentions) <= anaphors[pair_index]:
-                        print("Not found anaphor")
-                        continue
-
-                    if len(doc.system_mentions) <= antecedents[pair_index]:
-                        print("Not found antecedents")
-                        continue
-
                     arc = (doc.system_mentions[anaphors[pair_index]],
                            doc.system_mentions[antecedents[pair_index]])
 
@@ -232,7 +215,7 @@ class InstanceExtractor:
             if not struct:
                 continue
 
-            for arc in tqdm(struct, desc="Arc"):
+            for arc in struct:
                 # ids for anaphor and antecedent
                 anaphors.append(mentions_to_ids[arc[0]])
                 antecedents.append(mentions_to_ids[arc[1]])
@@ -278,92 +261,6 @@ class InstanceExtractor:
                 substructures_mapping)
 
     def _extract_features(self, arc, cache):
-        return self._extract_features_effective(arc, cache)
-
-    def _extract_features_bert(self, arc, cache):
-        anaphor, antecedent = arc
-
-        bert_features = []
-
-        # Non numeric (original)
-        inst_feats = []
-        numeric_types = {"float", "int"}
-        if not antecedent.is_dummy():
-            pairwise_features = [feature(anaphor, antecedent) for feature in self.pairwise_features]
-            # Real Numeric
-            original_features = []
-            for k, v in pairwise_features:
-                if "bert" in k:
-                    bert_features.append((k, v))
-                else:
-                    original_features.append((k, v))
-
-            # mention features
-            for mention in [anaphor, antecedent]:
-                if mention not in cache:
-                    cache[mention] = [feature(mention) for feature
-                                      in self.mention_features]
-
-            ana_features = cache[anaphor]
-            ante_features = cache[antecedent]
-
-            # first: non-numeric features (categorial, boolean)
-            inst_feats += ["ana_" + feat + "=" +
-                           self.convert_to_string_function(val) for feat, val in
-                           ana_features if type(val).__name__ not in
-                           numeric_types]
-
-            len_ana_features = len(inst_feats)
-
-            inst_feats += ["ante_" + feat + "=" +
-                           self.convert_to_string_function(val) for feat, val in
-                           ante_features if type(val).__name__ not in
-                           numeric_types]
-
-            # concatenated features
-            inst_feats += ["ana_" + ana_info[0] + "=" +
-                           self.convert_to_string_function(ana_info[1]) +
-                           "^ante_" + ante_info[0] + "=" +
-                           self.convert_to_string_function(ante_info[1])
-                           for ana_info, ante_info in
-                           zip(ana_features, ante_features)]
-
-            # pairwise features
-            inst_feats += [feature + "=" +
-                           self.convert_to_string_function(val) for feature, val
-                           in original_features
-                           if val and (type(val).__name__ not in numeric_types)]
-
-            # feature combinations
-            fine_type_indices = {len_ana_features * i for i
-                                 in [0, 1, 2]}
-
-            inst_feats += [
-                inst_feats[i] + "^" + word for i in fine_type_indices
-                for j, word in enumerate(inst_feats)
-                if j not in fine_type_indices
-            ]
-        else:
-            for f in []: # self.pairwise_features:
-                try:
-                    f, v = f(anaphor, antecedent)
-                    if "bert" in f:
-                        bert_features.append((f, v))
-                except (KeyError, AttributeError):
-                    pass
-
-        vals = [] if len(bert_features) == 0 else numpy.concatenate([x[1] for x in bert_features])
-        all_numeric_feats = array.array('I', list(range(len(vals))))
-        numeric_vals = array.array("f", vals)
-
-        # to hash
-        all_nonnumeric_feats = array.array(
-            'I', [mmh3.hash(word.encode("utf-8")) & 2 ** 24 - 1 for word
-                  in inst_feats])
-
-        return all_nonnumeric_feats, all_numeric_feats, numeric_vals
-
-    def _extract_features_original(self, arc, cache):
         anaphor, antecedent = arc
         inst_feats = []
         numeric_features = []
@@ -448,4 +345,6 @@ class InstanceExtractor:
                   in numeric_features])
         numeric_vals = array.array("f", [val for _, val in numeric_features])
 
+        # print(f"Arc:{arc}")
+        # print(f"Features:{all_nonnumeric_feats}")
         return all_nonnumeric_feats, all_numeric_feats, numeric_vals
